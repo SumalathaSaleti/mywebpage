@@ -18,6 +18,7 @@
 				<div class="brand-sub">Faculty Profile (Unofficial)</div>
 			</div>
 			<nav class="nav" id="topNav">
+				<a href="#highlights">Highlights</a>
 				<a href="#about">About</a>
 				<a href="#contact">Contact</a>
 				<a href="#education">Education</a>
@@ -40,6 +41,30 @@
 				<div class="meta">
 					<a class="email" href="mailto:sumalatha.s@srmap.edu.in">sumalatha.s@srmap.edu.in</a>
 					<span class="office">Office: SR Block, Level 5, Cabin No: 20</span>
+				</div>
+			</div>
+		</section>
+
+		<section id="highlights" class="section">
+			<div class="container">
+				<h2>Highlights</h2>
+				<div class="highlights-grid">
+					<article class="highlight">
+						<h3>Q1 Journal Publications</h3>
+						<p>Published in top-ranked venues including Biomedical Signal Processing and Control and IEEE Access.</p>
+					</article>
+					<article class="highlight">
+						<h3>Student Awards</h3>
+						<p>Supervised UG teams winning Gold and Silver Medals at SRM AP Research Day (2022).</p>
+					</article>
+					<article class="highlight">
+						<h3>Research Areas</h3>
+						<p>Federated learning, incremental mining algorithms, and learning analytics for LMS navigation.</p>
+					</article>
+					<article class="highlight">
+						<h3>Academic Journey</h3>
+						<p>Ph.D. from NIT Warangal (2020); over a decade of teaching and research experience.</p>
+					</article>
 				</div>
 			</div>
 		</section>
@@ -152,6 +177,12 @@
 					<label for="bibfile" class="upload-label">Load from BibTeX (Google Scholar export):</label>
 					<input type="file" id="bibfile" accept=".bib" />
 					<button type="button" id="clearPubs" class="btn-secondary">Clear</button>
+				</div>
+				<div class="upload-row">
+					<label for="bibpaste" class="upload-label">Or paste BibTeX here:</label>
+					<textarea id="bibpaste" rows="5" placeholder="Paste your BibTeX entries from Google Scholar..."></textarea>
+					<button type="button" id="loadFromPaste" class="btn-secondary">Load</button>
+					<button type="button" id="exportCsv" class="btn-secondary">Export CSV</button>
 				</div>
 				<p class="note">Tip: In Google Scholar, select your publications → Export → BibTeX, then upload the .bib file here to populate all entries automatically.</p>
 				<div class="tabs" role="tablist" aria-label="Publication categories">
@@ -294,14 +325,38 @@
 			return authors.replace(/\s+and\s+/gi, ', ');
 		}
 
+		function getPublisherSearchUrl(title, fields) {
+			const hay = `${fields.journal || ''} ${fields.booktitle || ''} ${fields.publisher || ''}`.toLowerCase();
+			const q = encodeURIComponent(title);
+			if (hay.includes('ieee')) return `https://ieeexplore.ieee.org/search/searchresult.jsp?queryText=${q}`;
+			if (hay.includes('acm')) return `https://dl.acm.org/action/doSearch?AllField=${q}`;
+			if (hay.includes('springer') || hay.includes('lecture notes in computer science') || hay.includes('lncs')) return `https://link.springer.com/search?query=${q}`;
+			if (hay.includes('elsevier') || hay.includes('sciencedirect')) return `https://www.sciencedirect.com/search?qs=${q}`;
+			if (hay.includes('wiley')) return `https://onlinelibrary.wiley.com/action/doSearch?AllField=${q}`;
+			if (hay.includes('taylor') || hay.includes('tandfonline') || hay.includes('taylor & francis')) return `https://www.tandfonline.com/search?query=${q}`;
+			if (hay.includes('mdpi')) return `https://www.mdpi.com/search?q=${q}`;
+			if (hay.includes('hindawi')) return `https://www.hindawi.com/search/all/?q=${q}`;
+			if (hay.includes('frontiers')) return `https://www.frontiersin.org/search?query=${q}`;
+			if (hay.includes('plos')) return `https://journals.plos.org/plosone/search?q=${q}`;
+			if (hay.includes('sage')) return `https://journals.sagepub.com/action/doSearch?AllField=${q}`;
+			if (hay.includes('nature')) return `https://www.nature.com/search?q=${q}`;
+			return `https://www.google.com/search?q=${q}`;
+		}
+
 		function entryToHtml(entry) {
 			const f = entry.fields;
 			const title = f.title || 'Untitled';
 			const authors = formatAuthors(f.author);
 			const year = f.year ? ` (${f.year})` : '';
 			const where = f.journal || f.booktitle || f.publisher || '';
-			const doi = f.doi ? ` <a href="https://doi.org/${f.doi}" target="_blank" rel="noopener">doi:${f.doi}</a>` : '';
-			return `<li><strong>${title}</strong><br /><span>${authors}${year}${where ? ' — ' + where : ''}.${doi}</span></li>`;
+			const doiUrl = f.doi ? `https://doi.org/${f.doi}` : '';
+			const arxivUrl = (f.eprint && /arxiv/i.test(f.archiveprefix || '')) ? `https://arxiv.org/abs/${f.eprint}` : '';
+			const directUrl = f.url || f.link || '';
+			const publisherUrl = getPublisherSearchUrl(title, f);
+			const bestUrl = directUrl || doiUrl || arxivUrl || publisherUrl;
+			const doi = f.doi ? ` <a href="${doiUrl}" target="_blank" rel="noopener">doi:${f.doi}</a>` : '';
+			const scholarLink = `<a href="https://scholar.google.com/scholar?q=${encodeURIComponent(title)}" target="_blank" rel="noopener" style="margin-left:6px; font-size:12px;">Scholar</a>`;
+			return `<li><strong><a href="${bestUrl}" target="_blank" rel="noopener">${title}</a></strong><br /><span>${authors}${year}${where ? ' — ' + where : ''}.${doi}${scholarLink}</span></li>`;
 		}
 
 		function categorize(entry) {
@@ -331,6 +386,9 @@
 			setHtml('tab-conferences', map.conferences);
 			setHtml('tab-bookchapters', map.bookchapters);
 			setHtml('tab-patents', map.patents);
+
+			// persist
+			try { localStorage.setItem('publications.bibtex', JSON.stringify(entries)); } catch (e) {}
 		}
 
 		if (bibInput) {
@@ -350,8 +408,55 @@
 					if (panel) panel.innerHTML = '';
 				});
 				if (bibInput) bibInput.value = '';
+				const ta = document.getElementById('bibpaste'); if (ta) ta.value = '';
+				try { localStorage.removeItem('publications.bibtex'); } catch (e) {}
 			});
 		}
+
+		// Paste loader
+		const loadFromPaste = document.getElementById('loadFromPaste');
+		if (loadFromPaste) {
+			loadFromPaste.addEventListener('click', () => {
+				const ta = document.getElementById('bibpaste');
+				if (!ta || !ta.value.trim()) return;
+				const entries = parseBibtex(ta.value);
+				renderPublications(entries);
+			});
+		}
+
+		// Export CSV
+		const exportCsvBtn = document.getElementById('exportCsv');
+		function csvEscape(val) {
+			const s = (val || '').toString();
+			if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+			return s;
+		}
+		function download(filename, text) {
+			const blob = new Blob([text], { type: 'text/csv;charset=utf-8;' });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url; a.download = filename; a.click();
+			setTimeout(() => URL.revokeObjectURL(url), 1000);
+		}
+		if (exportCsvBtn) {
+			exportCsvBtn.addEventListener('click', () => {
+				let entries = [];
+				try { const raw = localStorage.getItem('publications.bibtex'); if (raw) entries = JSON.parse(raw) || []; } catch (e) {}
+				if (!entries.length) return;
+				const header = ['type','title','author','year','journal','booktitle','publisher','doi'];
+				const rows = entries.map(e => header.map(h => csvEscape(e.fields[h] || (h === 'type' ? e.type : ''))).join(','));
+				download('publications.csv', header.join(',') + '\n' + rows.join('\n'));
+			});
+		}
+
+		// Auto-load from localStorage
+		try {
+			const raw = localStorage.getItem('publications.bibtex');
+			if (raw) {
+				const entries = JSON.parse(raw);
+				if (Array.isArray(entries) && entries.length) renderPublications(entries);
+			}
+		} catch (e) {}
 	</script>
 </body>
 </html>
